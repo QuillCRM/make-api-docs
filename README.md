@@ -166,9 +166,14 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe
 ```json
 {
   "api_key": "{{connection.apiKey}}",
-  "webhook_id": "{{webhook.id}}"
+  "webhook_id": "{{webhook.id}}",
+  "scenario_id": "{{parameters.scenario_id}}"
 }
 ```
+
+- `webhook_id` is the primary identifier.
+- `scenario_id` is accepted as a fallback if `webhook_id` is not provided.
+- At least one of `webhook_id` or `scenario_id` must be provided.
 
 ---
 
@@ -187,6 +192,18 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks
   "api_key": "{{connection.apiKey}}"
 }
 ```
+
+---
+
+### Polling
+
+**Endpoint**
+
+```
+GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/polling/{trigger_type}
+```
+
+Used for REST Hook-style polling. `{trigger_type}` must be one of the supported trigger types listed above.
 
 ---
 
@@ -234,8 +251,8 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/stages
 {
   "success": true,
   "data": [
-    { "id": 1, "name": "Qualification" },
-    { "id": 2, "name": "Proposal" }
+    { "id": 1, "name": "Qualification", "pipeline_id": 1, "win_probability": 10 },
+    { "id": 2, "name": "Proposal", "pipeline_id": 1, "win_probability": 50 }
   ]
 }
 ```
@@ -350,12 +367,24 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/create
   "last_name": "Doe",
   "phone": "+1234567890",
   "whatsapp_phone": "+1234567890",
+  "address_1": "123 Main St",
+  "address_2": "Suite 100",
+  "city": "New York",
+  "state": "NY",
+  "country": "US",
+  "zip": "10001",
+  "source": "make",
+  "email_status": "subscribed",
+  "sms_status": "subscribed",
+  "whatsapp_status": "subscribed",
   "tags": [
     { "id": 1, "name": "VIP" }
   ],
   "lists": [
     { "id": 1, "name": "Newsletter" }
   ],
+  "created_at": "2026-01-15 10:30:00",
+  "updated_at": "2026-01-15 10:30:00",
   "contact_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=contacts/123"
 }
 ```
@@ -501,10 +530,24 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/create
   "id": 456,
   "title": "New Deal",
   "value": 5000,
+  "currency": "USD",
+  "status": "open",
+  "priority": "high",
+  "probability": 25,
+  "expected_close_date": "2026-03-15",
+  "source": "make",
+  "lost_reason": "",
+  "contact_id": 123,
   "contact_email": "jane@example.com",
+  "contact_name": "Jane Doe",
+  "pipeline_id": 1,
   "pipeline_name": "Sales Pipeline",
+  "stage_id": 1,
   "stage_name": "Qualification",
+  "owner_id": 1,
   "owner_name": "John Doe",
+  "created_at": "2026-03-01 12:00:00",
+  "updated_at": "2026-03-01 12:00:00",
   "deal_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=deals/456"
 }
 ```
@@ -604,7 +647,7 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
 |---|---|
 | `Content-Type` | `application/json` |
 | `User-Agent` | `QuillCRM-Make/1.0` |
-| `X-QuillCRM-Trigger` | e.g. `contact.subscribed`, `deal.created` |
+| `X-QuillCRM-Trigger` | e.g. `contact.contact_subscribed`, `deal.deal_created` |
 
 ### Contact Payload
 
@@ -618,8 +661,11 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
   "phone": "+1234567890",
   "whatsapp_phone": "+1234567890",
   "address_1": "123 Main St",
+  "address_2": "Suite 100",
   "city": "New York",
+  "state": "NY",
   "country": "US",
+  "zip": "10001",
   "source": "form",
   "email_status": "subscribed",
   "sms_status": "subscribed",
@@ -643,6 +689,32 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
 }
 ```
 
+**Additional fields for tag triggers** (`contact_tags_applied`, `contact_tags_removed`):
+
+```json
+{
+  "tags_applied": [
+    { "id": 1, "name": "VIP" }
+  ],
+  "tags_removed": [
+    { "id": 2, "name": "Old Tag" }
+  ]
+}
+```
+
+**Additional fields for list triggers** (`contact_lists_applied`, `contact_lists_removed`):
+
+```json
+{
+  "lists_applied": [
+    { "id": 1, "name": "Newsletter" }
+  ],
+  "lists_removed": [
+    { "id": 2, "name": "Old List" }
+  ]
+}
+```
+
 ### Deal Payload
 
 ```json
@@ -650,11 +722,25 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
   "id": 456,
   "title": "New Deal",
   "value": 5000,
+  "currency": "USD",
+  "status": "open",
+  "priority": "high",
+  "probability": 75,
+  "expected_close_date": "2026-04-01",
+  "source": "website",
+  "lost_reason": "",
+  "contact_id": 123,
   "contact_email": "jane@example.com",
+  "contact_name": "Jane Doe",
+  "pipeline_id": 1,
   "pipeline_name": "Sales Pipeline",
+  "stage_id": 1,
   "stage_name": "Qualification",
+  "owner_id": 1,
   "owner_name": "John Doe",
   "trigger_type": "deal_created",
+  "created_at": "2026-01-15 10:30:00",
+  "updated_at": "2026-02-20 14:00:00",
   "deal_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=deals/456",
   "_make": {
     "webhook_id": "uuid-string",
@@ -665,17 +751,41 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
 }
 ```
 
-For change triggers (`deal_stage_changed`, `deal_value_changed`, `deal_owner_changed`), additional fields are included:
+**Additional fields for change triggers:**
+
+For `deal_stage_changed`:
 
 - `old_stage_id` / `new_stage_id`
+- `old_stage_name` / `new_stage_name`
+
+For `deal_value_changed`:
+
 - `old_value` / `new_value`
+
+For `deal_owner_changed`:
+
 - `old_owner_id` / `new_owner_id`
+- `old_owner_name` / `new_owner_name`
 
 ---
 
 ## Error Responses
 
-All endpoints return errors in this format:
+All endpoints return errors in one of the following formats:
+
+### WordPress REST API Errors (auth/validation)
+
+```json
+{
+  "code": "invalid_api_key",
+  "message": "Invalid API key.",
+  "data": {
+    "status": 401
+  }
+}
+```
+
+### Action Handler Errors
 
 ```json
 {
