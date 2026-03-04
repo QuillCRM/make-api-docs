@@ -1,3 +1,7 @@
+Here's your updated docs with all the changes reflected from the code:
+
+---
+
 # QuillCRM Pro Make API Docs
 
 ## Connection
@@ -10,9 +14,10 @@
 
 All requests must include authentication via one of these methods:
 
-1. **Body parameter:** `api_key` in the JSON request body
-2. **Header:** `x_api_key`
-3. **Header:** `Authorization: Bearer {{connection.apiKey}}`
+1. **Query string parameter:** `api_key`
+2. **Body parameter:** `api_key` in the JSON request body
+3. **Header:** `x_api_key`
+4. **Header:** `Authorization: Bearer {{connection.apiKey}}`
 
 ### Logging
 
@@ -27,15 +32,13 @@ Verify that the API key is valid.
 **Endpoint**
 
 ```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/auth/test
+GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/auth/test
 ```
 
-**Request Body**
+**Query String**
 
-```json
-{
-  "api_key": "{{connection.apiKey}}"
-}
+```
+?api_key={{connection.apiKey}}
 ```
 
 **Success Response**
@@ -97,7 +100,6 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe
 {
   "api_key": "{{connection.apiKey}}",
   "hook_url": "{{webhook.url}}",
-  "scenario_id": "{{parameters.scenario_id}}",
   "trigger_type": "<trigger_type>"
 }
 ```
@@ -106,11 +108,22 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe
 
 Depending on the trigger type, you can include additional filters:
 
-- `tag_ids` (array) — for `contact_tags_applied` / `contact_tags_removed`
-- `list_ids` (array) — for `contact_lists_applied` / `contact_lists_removed`
+- `tag_ids` (array or comma-separated string) — for `contact_tags_applied` / `contact_tags_removed`
+- `list_ids` (array or comma-separated string) — for `contact_lists_applied` / `contact_lists_removed`
 - `pipeline_id` (integer) — for deal triggers
 - `stage_id` (integer) — for deal triggers
 - `owner_id` (integer) — for deal triggers
+
+**Example (Contact Lists Applied)**
+
+```json
+{
+  "api_key": "{{connection.apiKey}}",
+  "hook_url": "{{webhook.url}}",
+  "trigger_type": "contact_lists_applied",
+  "list_ids": "1,2,3"
+}
+```
 
 **Example (Contact Tags Applied)**
 
@@ -118,7 +131,6 @@ Depending on the trigger type, you can include additional filters:
 {
   "api_key": "{{connection.apiKey}}",
   "hook_url": "{{webhook.url}}",
-  "scenario_id": "{{parameters.scenario_id}}",
   "trigger_type": "contact_tags_applied",
   "tag_ids": [1, 2, 3]
 }
@@ -130,7 +142,6 @@ Depending on the trigger type, you can include additional filters:
 {
   "api_key": "{{connection.apiKey}}",
   "hook_url": "{{webhook.url}}",
-  "scenario_id": "{{parameters.scenario_id}}",
   "trigger_type": "deal_stage_changed",
   "pipeline_id": 1,
   "stage_id": 2
@@ -149,7 +160,17 @@ Depending on the trigger type, you can include additional filters:
 }
 ```
 
-- `webhook_id` is stored and used for detach requests.
+**Make attach mapping:**
+
+```json
+{
+  "response": {
+    "output": {
+      "externalHookId": "{{body.data.webhook_id}}"
+    }
+  }
+}
+```
 
 ---
 
@@ -158,22 +179,38 @@ Depending on the trigger type, you can include additional filters:
 **Endpoint**
 
 ```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe
+DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe
 ```
 
-**Request Body**
+**Query String**
+
+```
+?api_key={{connection.apiKey}}&webhook_id={{webhook.externalHookId}}
+```
+
+- `webhook_id` (required) — the `externalHookId` stored during attach.
+
+**Success Response**
 
 ```json
 {
-  "api_key": "{{connection.apiKey}}",
-  "webhook_id": "{{webhook.id}}",
-  "scenario_id": "{{parameters.scenario_id}}"
+  "success": true,
+  "message": "Webhook unsubscribed successfully!"
 }
 ```
 
-- `webhook_id` is the primary identifier.
-- `scenario_id` is accepted as a fallback if `webhook_id` is not provided.
-- At least one of `webhook_id` or `scenario_id` must be provided.
+**Make detach mapping:**
+
+```json
+{
+  "url": "{{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe",
+  "method": "DELETE",
+  "qs": {
+    "api_key": "{{connection.apiKey}}",
+    "webhook_id": "{{webhook.externalHookId}}"
+  }
+}
+```
 
 ---
 
@@ -200,7 +237,7 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks
 **Endpoint**
 
 ```
-GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/polling/{trigger_type}
+GET|POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/polling/{trigger_type}
 ```
 
 Used for REST Hook-style polling. `{trigger_type}` must be one of the supported trigger types listed above.
@@ -682,9 +719,8 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
   "contact_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=contacts/123",
   "_make": {
     "webhook_id": "uuid-string",
-    "name": "My Webhook",
-    "sent_at": "2026-02-24 12:00:00",
-    "scenario_id": "scenario-123"
+    "name": "Unknown",
+    "sent_at": "2026-02-24T12:00:00+00:00"
   }
 }
 ```
@@ -744,9 +780,8 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
   "deal_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=deals/456",
   "_make": {
     "webhook_id": "uuid-string",
-    "name": "My Webhook",
-    "sent_at": "2026-02-24 12:00:00",
-    "scenario_id": "scenario-123"
+    "name": "Unknown",
+    "sent_at": "2026-02-24T12:00:00+00:00"
   }
 }
 ```
