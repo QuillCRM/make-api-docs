@@ -1,11 +1,3 @@
-Now I have a complete understanding of all the changes. Here's a comprehensive summary of the differences between the old documentation and the current codebase:
-
-**Major architectural change:** The plugin no longer uses WordPress REST API (`wp-json`) endpoints. Instead, it uses a single POST endpoint at the site root (`home_url()/`) with a `quillcrm_make_action` parameter to route all requests. This is the fundamental change that affects every section of the documentation.
-
-Here's the updated document:
-
----
-
 # QuillCRM Make API Docs
 
 ## Connection
