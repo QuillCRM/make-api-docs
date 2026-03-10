@@ -1,33 +1,82 @@
+Now I have a complete understanding of all the changes. Here's a comprehensive summary of the differences between the old documentation and the current codebase:
+
+**Major architectural change:** The plugin no longer uses WordPress REST API (`wp-json`) endpoints. Instead, it uses a single POST endpoint at the site root (`home_url()/`) with a `quillcrm_make_action` parameter to route all requests. This is the fundamental change that affects every section of the documentation.
+
+Here's the updated document:
+
+---
+
 # QuillCRM Make API Docs
 
 ## Connection
 
 ### Base URL
 
-`{{connection.baseUrl}}`
+```
+{{connection.baseUrl}}/
+```
+
+The base URL is the WordPress site root (e.g. `https://example.com/`). All requests are sent as `POST` to this single URL.
 
 ### Authentication
 
-All requests must include `api_key` as a query string parameter:
+All requests include `api_key` in the JSON request body (not as a query parameter):
 
+```json
+{
+  "quillcrm_make_action": "<action>",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
-?api_key={{connection.apiKey}}
+
+The API key is prefixed with `qc_` followed by 64 hex characters.
+
+### Routing
+
+Instead of separate REST API endpoints, all actions are routed through a single POST endpoint using the `quillcrm_make_action` field in the JSON body. The plugin reads `php://input` and dispatches to the appropriate handler based on the action value.
+
+### Response Format
+
+All responses use WordPress `wp_send_json_success` / `wp_send_json_error` format:
+
+**Success:**
+
+```json
+{
+  "success": true,
+  "data": { ... }
+}
 ```
 
-### Logging
+**Error:**
 
-Sensitive fields (`api_key`) are sanitized from logs.
+```json
+{
+  "success": false,
+  "data": {
+    "code": "optional_machine_code",
+    "message": "Human-readable message"
+  }
+}
+```
 
 ---
 
-## Auth Test
+## Auth
 
-Verify that the API key is valid.
+### Verify API Key
 
-**Endpoint**
+Validates whether a provided API key is correct. This action does **not** require prior authentication (the key itself is being verified).
 
-```
-GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/auth/test?api_key={{connection.apiKey}}
+**Action:** `verify_api_key`
+
+**Request Body**
+
+```json
+{
+  "quillcrm_make_action": "verify_api_key",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
 
 **Success Response**
@@ -35,8 +84,48 @@ GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/auth/test?api_key={{c
 ```json
 {
   "success": true,
-  "message": "Authentication successful!",
   "data": {
+    "message": "API key is valid.",
+    "site_name": "My WordPress Site",
+    "site_url": "https://example.com",
+    "version": "1.0.0"
+  }
+}
+```
+
+**Error Response (401)**
+
+```json
+{
+  "success": false,
+  "data": {
+    "message": "Invalid API key."
+  }
+}
+```
+
+### Test Authentication
+
+Verify that a previously authenticated connection is working. Requires a valid API key.
+
+**Action:** `test_authentication`
+
+**Request Body**
+
+```json
+{
+  "quillcrm_make_action": "test_authentication",
+  "api_key": "{{connection.apiKey}}"
+}
+```
+
+**Success Response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Authentication successful!",
     "site_name": "My WordPress Site",
     "site_url": "https://example.com",
     "version": "1.0.0"
@@ -50,18 +139,16 @@ GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/auth/test?api_key={{c
 
 QuillCRM supports attaching and detaching webhooks for contact and deal events.
 
-### Attach Webhook
+### Subscribe (Attach Webhook)
 
-**Endpoint**
-
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe?api_key={{connection.apiKey}}
-```
+**Action:** `subscribe`
 
 **Request Body**
 
 ```json
 {
+  "quillcrm_make_action": "subscribe",
+  "api_key": "{{connection.apiKey}}",
   "hook_url": "{{webhook.url}}",
   "trigger_type": "<trigger_type>"
 }
@@ -71,8 +158,8 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe?a
 
 | Parameter | Type | Used with |
 |---|---|---|
-| `tag_ids` | string (comma-separated) or array | `contact_tags_applied`, `contact_tags_removed` |
-| `list_ids` | string (comma-separated) or array | `contact_lists_applied`, `contact_lists_removed` |
+| `tag_ids` | array of integers | `contact_tags_applied`, `contact_tags_removed` |
+| `list_ids` | array of integers | `contact_lists_applied`, `contact_lists_removed` |
 | `pipeline_id` | integer | deal triggers |
 | `stage_id` | integer | deal triggers |
 | `owner_id` | integer | deal triggers |
@@ -81,9 +168,11 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe?a
 
 ```json
 {
+  "quillcrm_make_action": "subscribe",
+  "api_key": "{{connection.apiKey}}",
   "hook_url": "{{webhook.url}}",
   "trigger_type": "contact_lists_applied",
-  "list_ids": "{{parameters.list_id}}"
+  "list_ids": [1, 3]
 }
 ```
 
@@ -92,34 +181,65 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe?a
 ```json
 {
   "success": true,
-  "message": "Webhook subscribed successfully!",
   "data": {
     "externalHookId": "uuid-string",
-    "token": "64-char-hex-token"
+    "token": "64-char-hex-token",
+    "message": "Webhook subscribed successfully."
   }
 }
 ```
 
-- `externalHookId` is stored by Make and used for detach requests (`{{webhook.externalHookId}}`).
+- `externalHookId` is stored by Make and used for unsubscribe requests (`{{webhook.externalHookId}}`).
 - `token` is stored by Make and accessible via `{{webhook.token}}`.
 
-### Detach Webhook
+### Unsubscribe (Detach Webhook)
 
-**Endpoint**
+**Action:** `unsubscribe`
 
+**Request Body**
+
+```json
+{
+  "quillcrm_make_action": "unsubscribe",
+  "api_key": "{{connection.apiKey}}",
+  "webhook_id": "{{webhook.externalHookId}}"
+}
 ```
-DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe
+
+**Success Response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Webhook unsubscribed successfully."
+  }
+}
 ```
 
-**Query Parameters**
+### List Webhooks
 
-- `api_key`: `{{connection.apiKey}}`
-- `webhook_id`: `{{webhook.externalHookId}}`
+**Action:** `get_webhooks`
 
-**Example**
+**Request Body**
 
+```json
+{
+  "quillcrm_make_action": "get_webhooks",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
-DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe?api_key=XXXX&webhook_id=uuid-string
+
+**Success Response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Webhooks retrieved successfully.",
+    "data": [ ... ]
+  }
+}
 ```
 
 ---
@@ -155,12 +275,14 @@ DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscri
 
 ```json
 {
-  "url": "{{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/subscribe",
+  "url": "{{connection.baseUrl}}/",
   "method": "POST",
-  "qs": {
-    "api_key": "{{connection.apiKey}}"
+  "headers": {
+    "Content-Type": "application/json"
   },
   "body": {
+    "quillcrm_make_action": "subscribe",
+    "api_key": "{{connection.apiKey}}",
     "hook_url": "{{webhook.url}}",
     "trigger_type": "contact_lists_applied",
     "list_ids": "{{parameters.list_id}}"
@@ -178,9 +300,13 @@ DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscri
 
 ```json
 {
-  "url": "{{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscribe",
-  "method": "DELETE",
-  "qs": {
+  "url": "{{connection.baseUrl}}/",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "quillcrm_make_action": "unsubscribe",
     "api_key": "{{connection.apiKey}}",
     "webhook_id": "{{webhook.externalHookId}}"
   }
@@ -191,12 +317,17 @@ DELETE {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/webhooks/unsubscri
 
 ## Reference Endpoints
 
-These endpoints return data used to populate dropdowns in Make scenarios.
+These endpoints return data used to populate dropdowns in Make scenarios. All use `POST` to `{{connection.baseUrl}}/` with `quillcrm_make_action` and `api_key` in the JSON body.
 
 ### Get Lists
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/lists?api_key={{connection.apiKey}}
+**Action:** `get_lists`
+
+```json
+{
+  "quillcrm_make_action": "get_lists",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
 
 **Response**
@@ -204,16 +335,24 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/lists?api_key={{conn
 ```json
 {
   "success": true,
-  "data": [
-    { "id": 1, "name": "Newsletter" }
-  ]
+  "data": {
+    "message": "Lists retrieved successfully.",
+    "lists": [
+      { "id": 1, "name": "Newsletter" }
+    ]
+  }
 }
 ```
 
 ### Get Tags
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/tags?api_key={{connection.apiKey}}
+**Action:** `get_tags`
+
+```json
+{
+  "quillcrm_make_action": "get_tags",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
 
 **Response**
@@ -221,16 +360,24 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/tags?api_key={{conne
 ```json
 {
   "success": true,
-  "data": [
-    { "id": 1, "name": "VIP" }
-  ]
+  "data": {
+    "message": "Tags retrieved successfully.",
+    "tags": [
+      { "id": 1, "name": "VIP" }
+    ]
+  }
 }
 ```
 
 ### Get Pipelines
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/pipelines?api_key={{connection.apiKey}}
+**Action:** `get_pipelines`
+
+```json
+{
+  "quillcrm_make_action": "get_pipelines",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
 
 **Response**
@@ -238,22 +385,23 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/pipelines?api_key={{
 ```json
 {
   "success": true,
-  "data": [
-    { "id": 1, "name": "Sales Pipeline" }
-  ]
+  "data": {
+    "message": "Pipelines retrieved successfully.",
+    "pipelines": [
+      { "id": 1, "name": "Sales Pipeline" }
+    ]
+  }
 }
 ```
 
 ### Get Stages
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/stages?api_key={{connection.apiKey}}
-```
-
-**Request Body**
+**Action:** `get_stages`
 
 ```json
 {
+  "quillcrm_make_action": "get_stages",
+  "api_key": "{{connection.apiKey}}",
   "pipeline_id": 1
 }
 ```
@@ -263,17 +411,25 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/stages?api_key={{con
 ```json
 {
   "success": true,
-  "data": [
-    { "id": 1, "name": "Qualification", "pipeline_id": 1, "win_probability": 10 },
-    { "id": 2, "name": "Proposal", "pipeline_id": 1, "win_probability": 50 }
-  ]
+  "data": {
+    "message": "Stages retrieved successfully.",
+    "stages": [
+      { "id": 1, "name": "Qualification", "pipeline_id": 1, "win_probability": 10 },
+      { "id": 2, "name": "Proposal", "pipeline_id": 1, "win_probability": 50 }
+    ]
+  }
 }
 ```
 
 ### Get Owners
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/owners?api_key={{connection.apiKey}}
+**Action:** `get_owners`
+
+```json
+{
+  "quillcrm_make_action": "get_owners",
+  "api_key": "{{connection.apiKey}}"
+}
 ```
 
 **Response**
@@ -281,32 +437,55 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/owners?api_key={{con
 ```json
 {
   "success": true,
-  "data": [
-    { "id": 1, "display_name": "John Doe", "email": "john@example.com" }
-  ]
+  "data": {
+    "message": "Owners retrieved successfully.",
+    "owners": [
+      { "id": 1, "display_name": "John Doe", "email": "john@example.com" }
+    ]
+  }
 }
 ```
 
 ### Polling
 
+**Action:** `polling`
+
+```json
+{
+  "quillcrm_make_action": "polling",
+  "api_key": "{{connection.apiKey}}",
+  "trigger_type": "<trigger_type>"
+}
 ```
-GET {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/polling/{trigger_type}?api_key={{connection.apiKey}}
+
+**Response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Polling data retrieved successfully.",
+    "data": [ ... ]
+  }
+}
 ```
+
+Returns sample/fallback data for the specified trigger type if no real data is available.
 
 ---
 
 ## Contact Actions
 
+All contact actions use `POST` to `{{connection.baseUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated contact object.
+
 ### Create Contact
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/create?api_key={{connection.apiKey}}
-```
-
-**Request Body**
+**Action:** `create_contact`
 
 ```json
 {
+  "quillcrm_make_action": "create_contact",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "first_name": "Jane",
   "last_name": "Doe",
@@ -327,14 +506,48 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/create?api_
 }
 ```
 
-### Add Tags to Contact
+If a contact with the given email already exists, it is updated (upsert behavior via `createOrUpdate`). If `source` is not provided, defaults to `make`.
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/add-tags?api_key={{connection.apiKey}}
-```
+**Success Response**
 
 ```json
 {
+  "success": true,
+  "data": {
+    "id": 123,
+    "email": "jane@example.com",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "phone": "+1234567890",
+    "whatsapp_phone": "+1234567890",
+    "address_1": "123 Main St",
+    "address_2": "Suite 100",
+    "city": "New York",
+    "state": "NY",
+    "country": "US",
+    "zip": "10001",
+    "source": "make",
+    "email_status": "subscribed",
+    "sms_status": "subscribed",
+    "whatsapp_status": "subscribed",
+    "tags": [{ "id": 1, "name": "VIP" }],
+    "lists": [{ "id": 1, "name": "Newsletter" }],
+    "created_at": "2026-01-15 10:30:00",
+    "updated_at": "2026-02-20 14:00:00",
+    "contact_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=contacts/123",
+    "message": "Contact created successfully."
+  }
+}
+```
+
+### Add Tags to Contact
+
+**Action:** `add_tags`
+
+```json
+{
+  "quillcrm_make_action": "add_tags",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "tag_ids": [1, 2]
 }
@@ -342,12 +555,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/add-tags?ap
 
 ### Remove Tags from Contact
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/remove-tags?api_key={{connection.apiKey}}
-```
+**Action:** `remove_tags`
 
 ```json
 {
+  "quillcrm_make_action": "remove_tags",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "tag_ids": [1, 2]
 }
@@ -355,12 +568,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/remove-tags
 
 ### Add Contact to Lists
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/add-to-lists?api_key={{connection.apiKey}}
-```
+**Action:** `add_to_lists`
 
 ```json
 {
+  "quillcrm_make_action": "add_to_lists",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "list_ids": [1, 3]
 }
@@ -368,12 +581,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/add-to-list
 
 ### Remove Contact from Lists
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/remove-from-lists?api_key={{connection.apiKey}}
-```
+**Action:** `remove_from_lists`
 
 ```json
 {
+  "quillcrm_make_action": "remove_from_lists",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "list_ids": [1, 3]
 }
@@ -381,12 +594,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/remove-from
 
 ### Change Contact Status
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/change-status?api_key={{connection.apiKey}}
-```
+**Action:** `change_status`
 
 ```json
 {
+  "quillcrm_make_action": "change_status",
+  "api_key": "{{connection.apiKey}}",
   "email": "jane@example.com",
   "status_type": "email_status",
   "status": "subscribed"
@@ -401,14 +614,16 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/contacts/change-stat
 
 ## Deal Actions
 
+All deal actions use `POST` to `{{connection.baseUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated deal object.
+
 ### Create Deal
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/create?api_key={{connection.apiKey}}
-```
+**Action:** `add_deal`
 
 ```json
 {
+  "quillcrm_make_action": "add_deal",
+  "api_key": "{{connection.apiKey}}",
   "title": "New Deal",
   "email": "jane@example.com",
   "pipeline_id": 1,
@@ -421,14 +636,49 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/create?api_key
 }
 ```
 
-### Update Deal Title
+`pipeline_id` is required. If `stage_id` is omitted, the first stage of the pipeline is used. If `source` is not provided, defaults to `make`. The deal's `status` and `probability` are automatically derived from the stage's `win_probability`.
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-title?api_key={{connection.apiKey}}
-```
+**Success Response**
 
 ```json
 {
+  "success": true,
+  "data": {
+    "id": 456,
+    "title": "New Deal",
+    "value": 5000,
+    "currency": "USD",
+    "status": "open",
+    "priority": "high",
+    "probability": 10,
+    "expected_close_date": "2026-03-15",
+    "source": "make",
+    "lost_reason": "",
+    "contact_id": 123,
+    "contact_email": "jane@example.com",
+    "contact_name": "Jane Doe",
+    "pipeline_id": 1,
+    "pipeline_name": "Sales Pipeline",
+    "stage_id": 1,
+    "stage_name": "Qualification",
+    "owner_id": 1,
+    "owner_name": "John Doe",
+    "created_at": "2026-01-15 10:30:00",
+    "updated_at": "2026-02-20 14:00:00",
+    "deal_url": "https://example.com/wp-admin/admin.php?page=quillcrm&path=deals/456",
+    "message": "Deal created successfully."
+  }
+}
+```
+
+### Update Deal Title
+
+**Action:** `update_deal_title`
+
+```json
+{
+  "quillcrm_make_action": "update_deal_title",
+  "api_key": "{{connection.apiKey}}",
   "deal_id": 456,
   "title": "Updated Deal Title"
 }
@@ -436,12 +686,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-title?a
 
 ### Update Deal Value
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-value?api_key={{connection.apiKey}}
-```
+**Action:** `update_deal_value`
 
 ```json
 {
+  "quillcrm_make_action": "update_deal_value",
+  "api_key": "{{connection.apiKey}}",
   "deal_id": 456,
   "value": 7500
 }
@@ -449,12 +699,12 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-value?a
 
 ### Update Deal Owner
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-owner?api_key={{connection.apiKey}}
-```
+**Action:** `update_deal_owner`
 
 ```json
 {
+  "quillcrm_make_action": "update_deal_owner",
+  "api_key": "{{connection.apiKey}}",
   "deal_id": 456,
   "owner_id": 2
 }
@@ -462,19 +712,19 @@ POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-owner?a
 
 ### Update Deal Stage
 
-```
-POST {{connection.baseUrl}}/wp-json/qc/v1/integrations/make/deals/update-stage?api_key={{connection.apiKey}}
-```
+**Action:** `update_deal_stage`
 
 ```json
 {
+  "quillcrm_make_action": "update_deal_stage",
+  "api_key": "{{connection.apiKey}}",
   "deal_id": 456,
   "stage_id": 3,
   "pipeline_id": 1
 }
 ```
 
-`pipeline_id` is optional — if omitted, the deal's current pipeline is used.
+`pipeline_id` is optional — if omitted, the deal's current pipeline is used. The deal's `status` and `probability` are automatically updated based on the new stage's `win_probability`.
 
 ---
 
@@ -578,26 +828,85 @@ When a trigger fires, QuillCRM sends a POST request to the registered `hook_url`
 
 ---
 
+## Complete Action Reference
+
+| Action | Auth Required | Description |
+|---|---|---|
+| `verify_api_key` | No | Validate API key |
+| `test_authentication` | Yes | Test connection |
+| `subscribe` | Yes | Attach webhook |
+| `unsubscribe` | Yes | Detach webhook |
+| `get_webhooks` | Yes | List all webhooks |
+| `get_pipelines` | Yes | List pipelines |
+| `get_stages` | Yes | List stages (requires `pipeline_id`) |
+| `get_owners` | Yes | List owners |
+| `get_lists` | Yes | List lists |
+| `get_tags` | Yes | List tags |
+| `polling` | Yes | Get sample data for trigger type |
+| `create_contact` | Yes | Create or update contact |
+| `add_tags` | Yes | Add tags to contact |
+| `remove_tags` | Yes | Remove tags from contact |
+| `add_to_lists` | Yes | Add contact to lists |
+| `remove_from_lists` | Yes | Remove contact from lists |
+| `change_status` | Yes | Change contact status |
+| `add_deal` | Yes | Create deal |
+| `update_deal_title` | Yes | Update deal title |
+| `update_deal_value` | Yes | Update deal value |
+| `update_deal_owner` | Yes | Update deal owner |
+| `update_deal_stage` | Yes | Update deal stage |
+
+---
+
 ## Error Responses
 
-### WordPress REST API Errors
-
-```json
-{
-  "code": "invalid_api_key",
-  "message": "Invalid API key.",
-  "data": { "status": 401 }
-}
-```
-
-### Action Handler Errors
+### Authentication Error
 
 ```json
 {
   "success": false,
-  "code": "error_code",
-  "message": "Human-readable error message."
+  "data": {
+    "message": "Invalid api key."
+  }
 }
 ```
 
-Common HTTP status codes: `400` (bad request), `401` (unauthorized), `404` (not found), `500` (server error).
+HTTP status: `401`
+
+### Unknown Action
+
+```json
+{
+  "success": false,
+  "data": {
+    "message": "Unknown action."
+  }
+}
+```
+
+HTTP status: `422`
+
+### Validation / Action Handler Errors
+
+```json
+{
+  "success": false,
+  "data": {
+    "code": "error_code",
+    "message": "Human-readable error message."
+  }
+}
+```
+
+**Error codes:**
+
+| Code | Description |
+|---|---|
+| `unknown_action` | Unknown action type for handler |
+| `not_implemented` | Action handler method not implemented |
+| `action_failed` | Generic action failure |
+| `not_found` | Contact or deal not found |
+| `handler_unavailable` | Contact/deal handler not available |
+| `invalid_email` | Invalid email address |
+| `contact_not_found` | Contact not found by email |
+
+**Common HTTP status codes:** `400` (bad request/validation), `401` (unauthorized), `404` (not found), `422` (missing parameters), `500` (server error)
