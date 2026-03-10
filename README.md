@@ -2,13 +2,13 @@
 
 ## Connection
 
-### Base URL
+### Website URL
 
 ```
-{{connection.baseUrl}}/
+{{connection.websiteUrl}}/
 ```
 
-The base URL is the WordPress site root (e.g. `https://example.com/`). All requests are sent as `POST` to this single URL.
+The website URL is the WordPress site root (e.g. `https://example.com/`). All requests are sent as `POST` to this single URL.
 
 ### Authentication
 
@@ -25,7 +25,7 @@ The API key is prefixed with `qc_` followed by 64 hex characters.
 
 ### Routing
 
-Instead of separate REST API endpoints, all actions are routed through a single POST endpoint using the `quillcrm_make_action` field in the JSON body. The plugin reads `php://input` and dispatches to the appropriate handler based on the action value.
+Instead of separate REST API endpoints, all actions are routed through a single POST endpoint using the `quillcrm_make_action` field in the JSON body. The plugin reads `php://input` and dispatches to the appropriate handler websited on the action value.
 
 ### Response Format
 
@@ -267,7 +267,7 @@ QuillCRM supports attaching and detaching webhooks for contact and deal events.
 
 ```json
 {
-  "url": "{{connection.baseUrl}}/",
+  "url": "{{connection.websiteUrl}}/",
   "method": "POST",
   "headers": {
     "Content-Type": "application/json"
@@ -292,7 +292,7 @@ QuillCRM supports attaching and detaching webhooks for contact and deal events.
 
 ```json
 {
-  "url": "{{connection.baseUrl}}/",
+  "url": "{{connection.websiteUrl}}/",
   "method": "POST",
   "headers": {
     "Content-Type": "application/json"
@@ -309,7 +309,7 @@ QuillCRM supports attaching and detaching webhooks for contact and deal events.
 
 ## Reference Endpoints
 
-These endpoints return data used to populate dropdowns in Make scenarios. All use `POST` to `{{connection.baseUrl}}/` with `quillcrm_make_action` and `api_key` in the JSON body.
+These endpoints return data used to populate dropdowns in Make scenarios. All use `POST` to `{{connection.websiteUrl}}/` with `quillcrm_make_action` and `api_key` in the JSON body.
 
 ### Get Lists
 
@@ -468,7 +468,7 @@ Returns sample/fallback data for the specified trigger type if no real data is a
 
 ## Contact Actions
 
-All contact actions use `POST` to `{{connection.baseUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated contact object.
+All contact actions use `POST` to `{{connection.websiteUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated contact object.
 
 ### Create Contact
 
@@ -606,7 +606,7 @@ If a contact with the given email already exists, it is updated (upsert behavior
 
 ## Deal Actions
 
-All deal actions use `POST` to `{{connection.baseUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated deal object.
+All deal actions use `POST` to `{{connection.websiteUrl}}/` with the JSON body containing `quillcrm_make_action` and `api_key`. On success, the response includes the full updated deal object.
 
 ### Create Deal
 
@@ -716,7 +716,7 @@ All deal actions use `POST` to `{{connection.baseUrl}}/` with the JSON body cont
 }
 ```
 
-`pipeline_id` is optional — if omitted, the deal's current pipeline is used. The deal's `status` and `probability` are automatically updated based on the new stage's `win_probability`.
+`pipeline_id` is optional — if omitted, the deal's current pipeline is used. The deal's `status` and `probability` are automatically updated websited on the new stage's `win_probability`.
 
 ---
 
